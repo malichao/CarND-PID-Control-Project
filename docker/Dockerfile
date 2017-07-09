@@ -85,8 +85,11 @@ EXPOSE 4567
 # Latest X11 / mesa GL
 RUN apt-get update -y && apt-get install -y x11-apps
 
+# Install Qt creator for development
+RUN apt-get install -y qtcreator
+
 # Mount the user's home directory
-VOLUME "${home}"
+# VOLUME "${home}"
 
 RUN mkdir -p /home/${user} && \
     echo "${user}:x:${uid}:${gid}:${user},,,:/home/${user}:/bin/bash" >> /etc/passwd && \
