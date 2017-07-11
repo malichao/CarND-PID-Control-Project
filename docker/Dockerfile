@@ -1,7 +1,5 @@
 FROM ubuntu:14.04
 
-FROM gcc:5.4
-
 MAINTAINER Malcolm Ma <malichaooo@gmail.com>
 
 # Arguments
@@ -12,7 +10,14 @@ ARG home
 ARG shell
 
 # Basic Utilities
-RUN apt-get -y update && apt-get install -y sudo ssh build-essential git
+RUN apt-get -y update &&\
+	apt-get install -y sudo ssh build-essential git software-properties-common
+
+# Install g++ 5.x
+RUN add-apt-repository -y ppa:ubuntu-toolchain-r/test &&\
+	apt-get update -y && apt-get install -y gcc-5 g++-5 &&\
+	update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-5 60\
+	--slave /usr/bin/g++ g++ /usr/bin/g++-5
 
 # Install cmake 3.9
 RUN wget https://cmake.org/files/v3.9/cmake-3.9.0-rc5.tar.gz && \
@@ -21,7 +26,7 @@ RUN wget https://cmake.org/files/v3.9/cmake-3.9.0-rc5.tar.gz && \
 	cd .. && rm -rf cmake*
 
 # Install dependencies for uWebSockets
-RUN apt-get install -y apt-utils libssl-dev autotools-dev
+RUN apt-get install -y apt-utils libssl-dev autotools-dev automake libtool
 
 # Build libuv1 from source as it's not available on ubuntu 14
 RUN wget https://launchpad.net/ubuntu/+archive/primary/+files/libuv1_1.9.1.orig.tar.gz && \
@@ -36,18 +41,23 @@ RUN git clone https://github.com/uWebSockets/uWebSockets && cd uWebSockets && \
 	make install && cd ../.. && ln -s /usr/lib64/libuWS.so /usr/lib/libuWS.so &&\
 	rm -r uWebSockets
 
-# Install IPOPT
+# Install IPOPT, step 1
 ADD install_ipopt.sh .
 
+# Install IPOPT, step 2
 RUN wget https://www.coin-or.org/download/source/Ipopt/Ipopt-3.12.7.tgz &&\
 	 tar xf Ipopt-3.12.7.tgz && rm Ipopt-3.12.7.tgz
-RUN bash install_ipopt.sh Ipopt-3.12.7
+
+# Install IPOPT, step 3, the first line is to keep the gfortran installation silent
+RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections &&\
+	apt-get install -y gfortran pkg-config && bash install_ipopt.sh Ipopt-3.12.7 
 
 # Install CppAD
 RUN wget http://www.coin-or.org/download/source/CppAD/cppad-20170708.gpl.tgz && \
 	tar xf cppad-20170708.gpl.tgz && rm cppad-20170708.gpl.tgz && ldconfig
 
-RUN cd cppad-20170708 && mkdir build && cd build &&\
+RUN ln -s /usr/lib/x86_64-linux-gnu/libgfortran.so.3 /usr/lib/libgfortran.so &&\
+	cd cppad-20170708 && mkdir build && cd build &&\
 cmake 										\
     -D CMAKE_VERBOSE_MAKEFILE=YES						\
     -G "Unix Makefiles"							   	\
@@ -82,14 +92,11 @@ RUN apt-get update -y && apt-get install -y python2.7-dev python-matplotlib
 # Flask Server
 EXPOSE 4567
 
-# Latest X11 / mesa GL
-RUN apt-get update -y && apt-get install -y x11-apps
-
-# Install Qt creator for development
-RUN apt-get install -y qtcreator
-
-# Mount the user's home directory
-# VOLUME "${home}"
+# Install Qt creator 4.2.2 for development, this one needs OpenGL !!
+# The nvidia driver must match the one on the host system
+RUN add-apt-repository -y ppa:beineri/opt-qt571-trusty && apt-get -y update &&\
+	apt-get install -y qt57creator nvidia-375 &&\
+	ln -s /opt/qt57/bin/qtcreator /usr/local/bin/qtcreator
 
 RUN mkdir -p /home/${user} && \
     echo "${user}:x:${uid}:${gid}:${user},,,:/home/${user}:/bin/bash" >> /etc/passwd && \
